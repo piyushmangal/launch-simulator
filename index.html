@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategic Launch Authorization System (SLAS)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Tone.js for Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <!-- Load Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #0ea5e9; /* Sky 500 - for status/glow */
+            --danger-red: #ef4444;   /* Red 500 - for launch */
+            --warning-yellow: #facc15; /* Yellow 400 - for arming */
+            --bg-dark: #0f172a; /* Slate 900 */
+            --console-dark: #1e293b; /* Slate 800 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--primary-blue);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .console-container {
+            background-color: var(--console-dark);
+            border: 3px solid #334155; /* Slate 700 */
+            box-shadow: 0 0 40px rgba(14, 165, 233, 0.3); /* Blue Glow */
+            max-width: 500px;
+        }
+        .status-display {
+            font-family: monospace;
+            text-shadow: 0 0 8px var(--primary-blue);
+            border-bottom: 2px solid #334155;
+            background-color: #0f172a;
+        }
+        .warning-text {
+            color: var(--danger-red);
+            text-shadow: 0 0 6px var(--danger-red);
+        }
+        /* Flashing Animation */
+        .status-flashing {
+            animation: pulse-blue 1.5s infinite;
+        }
+        .armed-flashing {
+            animation: pulse-red 1s infinite;
+        }
+        @keyframes pulse-blue {
+            0%, 100% { opacity: 1; text-shadow: 0 0 8px var(--primary-blue); }
+            50% { opacity: 0.7; text-shadow: 0 0 4px var(--primary-blue); }
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; text-shadow: 0 0 8px var(--danger-red); }
+            50% { opacity: 0.3; text-shadow: 0 0 2px var(--danger-red); }
+        }
+
+        /* Keypad button styles */
+        .keypad-btn {
+            @apply p-4 bg-gray-600 text-white rounded-lg shadow-inner shadow-gray-900 transition-all duration-150 active:scale-95 text-xl font-bold border-2 border-gray-500;
+        }
+        .keypad-btn:hover {
+            @apply bg-gray-500 border-gray-400;
+        }
+        .launch-btn {
+            @apply w-full h-16 text-2xl font-black rounded-xl uppercase transition-all duration-300 shadow-2xl;
+        }
+        .launch-btn:disabled {
+            @apply bg-gray-700 text-gray-500 cursor-not-allowed border-gray-600 shadow-inner;
+        }
+        /* Visual Arming Switch */
+        .arm-lever-base {
+            @apply bg-gray-700 p-2 rounded-xl shadow-inner border border-gray-600;
+        }
+        .arm-lever-switch {
+            @apply w-full h-10 rounded-lg transition-all duration-300 flex items-center justify-center font-bold text-sm;
+        }
+
+        /* After Effect Modal */
+        #launch-effect {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 50;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: monospace;
+            text-align: center;
+            color: var(--primary-blue);
+            transition: opacity 1s;
+        }
+        .success-text {
+            font-size: 3rem;
+            text-shadow: 0 0 15px var(--primary-blue), 0 0 30px rgba(14, 165, 233, 0.7);
+            animation: success-glow 0.8s infinite alternate;
+        }
+        @keyframes success-glow {
+            from { text-shadow: 0 0 10px var(--primary-blue); }
+            to { text-shadow: 0 0 20px var(--primary-blue), 0 0 40px rgba(14, 165, 233, 0.9); }
+        }
+
+        /* Countdown specific styles */
+        .countdown-large {
+            font-size: 5rem !important; /* Override text-3xl */
+            line-height: 1;
+            color: var(--danger-red);
+            text-shadow: 0 0 10px var(--danger-red);
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="console-container p-6 rounded-3xl shadow-2xl">
+
+    <!-- Header & Status Display -->
+    <header class="text-center mb-6">
+        <h1 class="text-4xl font-black text-white mb-1 tracking-widest">S.L.A.S.</h1>
+        <p id="system-time" class="text-sm font-mono text-gray-400"></p>
+    </header>
+
+    <!-- New: Custom Destination Input -->
+    <div class="mb-4">
+        <label for="destination-input" class="block text-sm font-medium text-gray-400 mb-1">
+            TARGET DESTINATION (CUSTOM)
+        </label>
+        <input type="text" id="destination-input" 
+            class="w-full p-2 rounded-lg bg-gray-800 border border-gray-600 text-warning-yellow font-mono text-lg focus:outline-none focus:ring-2 focus:ring-primary-blue disabled:opacity-50 placeholder-gray-500"
+            placeholder="e.g., Saturn's Rings, Moon Base Alpha"
+            value="Exoplanet Kepler-186f">
+    </div>
+
+    <div id="display-panel" class="status-display p-4 rounded-lg mb-6">
+        <div class="flex justify-between items-center">
+             <span id="system-status" class="text-xl font-extrabold status-flashing">AWAITING AUTHORIZATION</span>
+             <span id="countdown-timer" class="text-3xl font-black text-white">T - 00</span>
+        </div>
+        <div id="code-entry" class="text-3xl font-mono h-10 flex justify-center items-center text-warning-yellow mt-2">
+            <span class="mr-3 text-lg text-gray-400">KEYCODE:</span>
+            <span id="input-display" class="tracking-widest">____</span>
+        </div>
+        <p id="message-display" class="text-sm text-gray-400 mt-2 h-4 text-center">Enter 4-digit keycode and press ENT.</p>
+    </div>
+
+    <!-- Main Control Section: Keypad, Arming Switch, Launch Button -->
+    <div class="grid grid-cols-3 gap-4">
+
+        <!-- 1. Keypad (Spanning 2 columns) -->
+        <div class="col-span-2 grid grid-cols-3 gap-4">
+            <!-- Numbers 1-9 -->
+            <button class="keypad-btn" onclick="handleKey('1')">1</button>
+            <button class="keypad-btn" onclick="handleKey('2')">2</button>
+            <button class="keypad-btn" onclick="handleKey('3')">3</button>
+            <button class="keypad-btn" onclick="handleKey('4')">4</button>
+            <button class="keypad-btn" onclick="handleKey('5')">5</button>
+            <button class="keypad-btn" onclick="handleKey('6')">6</button>
+            <button class="keypad-btn" onclick="handleKey('7')">7</button>
+            <button class="keypad-btn" onclick="handleKey('8')">8</button>
+            <button class="keypad-btn" onclick="handleKey('9')">9</button>
+
+            <!-- Control Buttons -->
+            <button class="keypad-btn text-red-400" onclick="handleKey('CLEAR')">CLR</button>
+            <button class="keypad-btn" onclick="handleKey('0')">0</button>
+            <button class="keypad-btn bg-blue-700 hover:bg-blue-600 border-blue-500" onclick="handleKey('ENTER')">ENT</button>
+        </div>
+
+        <!-- 2. Arming & Launch (Spanning 1 column) -->
+        <div class="col-span-1 flex flex-col gap-4">
+            <!-- Arming Switch -->
+            <div class="arm-lever-base flex flex-col gap-2">
+                <p class="text-xs text-gray-400 text-center uppercase tracking-widest">ARM STATUS</p>
+                <button id="arm-switch" class="arm-lever-switch bg-gray-500 text-gray-200" onclick="toggleArming()" disabled>
+                    DISARMED
+                </button>
+            </div>
+
+            <!-- Launch Button -->
+            <button id="launch-button"
+                class="launch-btn bg-red-800 text-red-200 border-4 border-red-600 shadow-red-900/50 hover:bg-red-700"
+                onclick="initiateLaunch()"
+                disabled>
+                LAUNCH
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- After Effect Overlay (Hidden by default) -->
+<div id="launch-effect">
+    <div class="success-text">LAUNCH SUCCESS</div>
+    <p class="text-xl text-white mt-4">Telemetry confirms trajectory is nominal.</p>
+    <p id="final-target-display" class="text-lg text-warning-yellow mt-2">Destination: EXOPLANET KEPLER-186F</p>
+    <div class="w-64 h-2 bg-gray-800 rounded-full mt-8 overflow-hidden border border-gray-700">
+        <div id="progress-bar" class="h-full bg-primary-blue transition-all duration-1000" style="width: 0%;"></div>
+    </div>
+    <p id="system-report" class="text-sm mt-4 text-gray-400">Final System Check: Complete</p>
+    
+    <!-- NEW RESTART BUTTON -->
+    <button onclick="resetSystem()"
+        class="mt-10 p-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-500 transition duration-150">
+        RESTART MODULE / SELECT NEW TARGET
+    </button>
+</div>
+
+
+<script>
+    // --- GLOBAL STATE AND CONFIGURATION ---
+    const CONFIG = {
+        ACCESS_CODE: '1379', // The required 4-digit code (kept secret here!)
+        COUNTDOWN_SECONDS: 10, // Increased countdown for more drama
+        PHASES: {
+            AWAITING_AUTH: 'AWAITING_AUTH',
+            AUTHORIZED: 'AUTHORIZED',
+            ARMED: 'ARMED',
+            LAUNCHED: 'LAUNCHED'
+        }
+    };
+
+    let currentState = {
+        phase: CONFIG.PHASES.AWAITING_AUTH,
+        currentInput: '',
+        isArmed: false,
+        countdown: CONFIG.COUNTDOWN_SECONDS,
+        interval: null,
+        clockInterval: null
+    };
+
+    // --- DOM REFERENCES ---
+    const dom = {
+        status: document.getElementById('system-status'),
+        message: document.getElementById('message-display'),
+        input: document.getElementById('input-display'),
+        armSwitch: document.getElementById('arm-switch'),
+        launchButton: document.getElementById('launch-button'),
+        timer: document.getElementById('countdown-timer'),
+        systemTime: document.getElementById('system-time'),
+        launchEffect: document.getElementById('launch-effect'),
+        progressBar: document.getElementById('progress-bar'),
+        systemReport: document.getElementById('system-report'),
+        destinationInput: document.getElementById('destination-input'), 
+        finalTargetDisplay: document.getElementById('final-target-display')
+    };
+
+    // --- TONE.JS SOUND SETUP ---
+    
+    // PolySynth for clean key clicks
+    const clickPolySynth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: 'square' },
+        envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 },
+        volume: -10 
+    }).toDestination();
+
+    // PolySynth for playing the success CHORD 
+    const successPolySynth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.5 },
+        volume: -5 
+    }).toDestination();
+
+    // Synth for error/denial buzz
+    const errorSynth = new Tone.NoiseSynth({
+        noise: { type: 'pink' },
+        envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.1 },
+        volume: -10 
+    }).toDestination();
+
+
+    // Separate synth for countdown beep 
+    const beepSynth = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 },
+        volume: -5 
+    }).toDestination();
+
+    // Noise for the sharp "ignition/blast" sound (explosion sound)
+    const noise = new Tone.NoiseSynth({
+        noise: { type: 'white' },
+        envelope: { attack: 0.01, decay: 0.8, sustain: 0, release: 0.1 },
+        volume: 0 
+    }).toDestination();
+
+
+    /** Plays a simple click sound for button presses. */
+    function playClick() {
+        if (Tone.context.state !== 'running') {
+            Tone.start();
+        }
+        clickPolySynth.triggerAttackRelease('C4', '8n');
+    }
+
+    /** Plays a success chime (chord). */
+    function playSuccessChime() {
+        // Uses PolySynth to correctly play the chord
+        successPolySynth.triggerAttackRelease(['C5', 'E5', 'G5'], '4n');
+    }
+
+    /** Plays an error buzz. */
+    function playErrorBuzz() {
+        errorSynth.triggerAttackRelease("8n", Tone.now());
+    }
+
+    /** Plays the countdown beep. */
+    function playCountdownBeep(time) {
+        if (time <= 3 && time > 0) {
+            // High intensity beep for final 3 seconds
+            beepSynth.triggerAttackRelease('G5', '8n');
+        } else if (time > 0) {
+            // Standard beep
+            beepSynth.triggerAttackRelease('C5', '8n');
+        }
+    }
+
+    /** Plays a dramatic lift-off sound effect (rising pitch and explosion). */
+    function playLiftOffSequence() {
+        // 1. Sharp Ignition Blast (simulated explosion)
+        noise.triggerAttackRelease("4n", Tone.now());
+
+        // 2. Rising Whoosh (simulated rocket climb)
+        const oscillator = new Tone.Oscillator({
+            type: 'sawtooth',
+            frequency: 100, // Start lower
+            volume: -10
+        }).toDestination();
+        
+        // Ramp up frequency over 4 seconds
+        oscillator.frequency.rampTo(1200, 4); 
+        
+        // Louder peak volume, longer fade out
+        oscillator.volume.rampTo(-3, 1, 0); 
+        oscillator.volume.rampTo(-100, 3, 1); 
+
+        oscillator.start(Tone.now()).stop(Tone.now() + 4.5); 
+    }
+    
+    // --- UTILITY FUNCTIONS ---
+
+    /** Updates the system clock display */
+    function updateSystemTime() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+        const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        dom.systemTime.textContent = `OPERATION TIME: ${dateStr} ${timeStr}`;
+    }
+
+    /** Resets the entire system state to initial startup */
+    function resetSystem() {
+        // Reset core state variables
+        currentState.phase = CONFIG.PHASES.AWAITING_AUTH;
+        currentState.currentInput = '';
+        currentState.isArmed = false;
+        currentState.countdown = CONFIG.COUNTDOWN_SECONDS;
+        if (currentState.interval) {
+            clearInterval(currentState.interval);
+            currentState.interval = null;
+        }
+
+        // Reset UI elements
+        dom.launchEffect.style.display = 'none'; // Hide the overlay
+        dom.launchButton.textContent = 'LAUNCH';
+        dom.launchButton.classList.remove('bg-gray-700', 'text-white', 'border-gray-700');
+        dom.launchButton.classList.add('bg-red-800', 'text-red-200', 'border-red-600', 'shadow-red-900/50', 'hover:bg-red-700');
+        
+        dom.progressBar.style.width = '0%';
+        dom.progressBar.classList.remove('bg-green-500');
+        dom.progressBar.classList.add('bg-primary-blue');
+        dom.systemReport.textContent = 'Final System Check: Complete';
+        dom.timer.classList.remove('countdown-large'); // Ensure large class is off on reset
+
+        // Re-render the main console
+        render();
+        playClick(); // Confirmation sound
+    }
+
+    /** Renders the current state to the UI */
+    function render() {
+        // 1. Update Code Input Display
+        let maskedInput = currentState.currentInput.split('').map(() => '*').join('');
+        maskedInput += '_'.repeat(4 - currentState.currentInput.length);
+        dom.input.textContent = maskedInput;
+
+        // Reset timer class for standard view
+        // IMPORTANT FIX: Removing the class here prevents it from being reapplied by accident in non-countdown phases
+        if (currentState.phase !== CONFIG.PHASES.LAUNCHED) {
+             dom.timer.classList.remove('countdown-large');
+        }
+        
+        // 2. Update Status and Controls based on Phase
+        dom.status.classList.remove('status-flashing', 'armed-flashing', 'warning-text');
+        dom.launchButton.disabled = true;
+        dom.armSwitch.disabled = true;
+        
+        // 3. Lock destination input during auth and launch
+        const isLaunchOrAuth = currentState.phase !== CONFIG.PHASES.AWAITING_AUTH;
+        dom.destinationInput.disabled = isLaunchOrAuth;
+        dom.destinationInput.style.opacity = isLaunchOrAuth ? '0.5' : '1.0';
+
+
+        switch (currentState.phase) {
+            case CONFIG.PHASES.AWAITING_AUTH:
+                dom.status.textContent = 'STATUS: IDLE';
+                dom.message.textContent = 'Enter 4-digit keycode and press ENT.';
+                dom.status.classList.add('status-flashing');
+                dom.timer.textContent = 'T - 00';
+                break;
+
+            case CONFIG.PHASES.AUTHORIZED:
+                dom.status.textContent = 'STATUS: ACCESS GRANTED';
+                dom.message.textContent = 'Keycode validated. Activate ARM switch.';
+                dom.armSwitch.disabled = false;
+                dom.status.classList.add('warning-text');
+                dom.timer.textContent = 'T - 00';
+                break;
+
+            case CONFIG.PHASES.ARMED:
+                dom.status.textContent = 'STATUS: STANDBY/READY';
+                dom.message.textContent = 'Launch Sequence is ready. Press LAUNCH.';
+                dom.launchButton.disabled = false;
+                dom.status.classList.add('armed-flashing', 'warning-text');
+                dom.timer.textContent = 'T - 00'; // Set to 00 when armed
+                break;
+
+            case CONFIG.PHASES.LAUNCHED:
+                // When LAUNCHED, we don't change the status/message here, 
+                // as initiateLaunch() and startCountdown() manage the text updates directly
+                // to show the system check/countdown progression.
+                
+                dom.launchButton.classList.add('bg-gray-700', 'text-white', 'border-gray-700');
+                dom.launchButton.classList.remove('bg-red-800', 'text-red-200', 'border-red-600', 'shadow-red-900/50', 'hover:bg-red-700');
+                dom.launchButton.textContent = 'COUNTDOWN';
+                dom.launchButton.disabled = true;
+                dom.armSwitch.disabled = true;
+                // NOTE: The large class is now added ONLY in startCountdown()
+                break;
+        }
+
+        // 4. Update Arm Switch Visual
+        if (currentState.isArmed) {
+            dom.armSwitch.textContent = 'ARMED (LOCKED)';
+            dom.armSwitch.classList.remove('bg-gray-500', 'text-gray-200');
+            dom.armSwitch.classList.add('bg-warning-yellow', 'text-gray-900', 'shadow-lg');
+        } else {
+            dom.armSwitch.textContent = 'DISARMED';
+            dom.armSwitch.classList.remove('bg-warning-yellow', 'text-gray-900', 'shadow-lg');
+            dom.armSwitch.classList.add('bg-gray-500', 'text-gray-200');
+        }
+    }
+
+    // --- EVENT HANDLERS ---
+
+    /** Handles numeric key input and control commands (CLEAR/ENTER) */
+    function handleKey(key) {
+        playClick(); // Add click sound on every keypress
+        if (currentState.phase !== CONFIG.PHASES.AWAITING_AUTH) return;
+
+        if (key >= '0' && key <= '9') {
+            if (currentState.currentInput.length < 4) {
+                currentState.currentInput += key;
+                dom.message.textContent = 'Entering Code...';
+            } else {
+                dom.message.textContent = 'Code input full.';
+            }
+        } else if (key === 'CLEAR') {
+            currentState.currentInput = '';
+            dom.message.textContent = 'Code cleared. Re-enter.';
+        } else if (key === 'ENTER') {
+            if (currentState.currentInput.length === 4) {
+                checkCode();
+            } else {
+                dom.message.textContent = 'ERROR: 4 digits required.';
+            }
+        }
+        render();
+    }
+
+    /** Verifies the entered code against the system config */
+    function checkCode() {
+        if (currentState.currentInput === CONFIG.ACCESS_CODE) {
+            currentState.phase = CONFIG.PHASES.AUTHORIZED;
+            currentState.currentInput = ''; // Clear input field after success
+            playSuccessChime(); // Play success sound
+        } else {
+            // Failure sequence
+            dom.message.classList.add('warning-text');
+            dom.message.textContent = 'ACCESS DENIED. Invalid Keycode.';
+            currentState.currentInput = '';
+            playErrorBuzz(); // Play error sound
+            setTimeout(() => {
+                dom.message.classList.remove('warning-text');
+                dom.message.textContent = 'Enter 4-digit keycode and press ENT.';
+            }, 2000);
+        }
+        render();
+    }
+
+    /** Toggles the system arming status */
+    function toggleArming() {
+        playClick(); // Add click sound
+        if (currentState.phase === CONFIG.PHASES.AUTHORIZED || currentState.phase === CONFIG.PHASES.ARMED) {
+            currentState.isArmed = !currentState.isArmed;
+            if (currentState.isArmed) {
+                currentState.phase = CONFIG.PHASES.ARMED;
+            } else {
+                currentState.phase = CONFIG.PHASES.AUTHORIZED; // Go back to authorized state
+            }
+        }
+        render();
+    }
+
+    /** Starts the final countdown and "launch" sequence */
+    function initiateLaunch() {
+        if (currentState.phase !== CONFIG.PHASES.ARMED) return;
+
+        // 1. Lock controls and initiate System Check sequence
+        currentState.phase = CONFIG.PHASES.LAUNCHED;
+        dom.status.textContent = 'SYSTEM CHECK...';
+        dom.message.textContent = 'VERIFYING LAUNCH PARAMETERS.';
+        // Call render to lock buttons/input, but it will NOT make the timer big yet.
+        render(); 
+
+        // 2. Introduce a delay for the "system check"
+        setTimeout(() => {
+            startCountdown();
+        }, 2000);
+    }
+    
+    /** Starts the numerical countdown after system checks pass. */
+    function startCountdown() {
+        // Reset countdown value just in case
+        currentState.countdown = CONFIG.COUNTDOWN_SECONDS; 
+        
+        // FIX: Add the large class here, right before the countdown starts.
+        dom.timer.classList.add('countdown-large');
+        
+        dom.timer.textContent = currentState.countdown < 10 ? `0${currentState.countdown}` : currentState.countdown;
+        
+        // Update status display to show countdown initiation
+        dom.status.textContent = 'COUNTDOWN ACTIVE';
+        dom.message.textContent = `T-minus ${currentState.countdown}...`;
+
+
+        // Start Countdown Interval
+        currentState.interval = setInterval(() => {
+            currentState.countdown--;
+            playCountdownBeep(currentState.countdown); // Play beep
+
+            if (currentState.countdown > 0) {
+                dom.timer.textContent = currentState.countdown < 10 ? `0${currentState.countdown}` : currentState.countdown;
+                dom.message.textContent = `T-minus ${currentState.countdown}...`;
+            } else {
+                clearInterval(currentState.interval);
+                finalLaunchConfirmation();
+            }
+        }, 1000);
+    }
+
+    /** Final visual/text update and triggers the after effect */
+    function finalLaunchConfirmation() {
+        dom.timer.textContent = 'LIFT OFF';
+        dom.status.textContent = 'VEHICLE DEPLOYED';
+        dom.message.textContent = 'The launch sequence is complete. Transitioning to telemetry.';
+        dom.status.classList.remove('armed-flashing');
+        dom.status.style.textShadow = '0 0 10px var(--warning-yellow)'; // Change glow color
+
+        playLiftOffSequence(); // 🚀 Play the dramatic sound effect 🚀
+
+        // Get value from the text input, defaulting if empty
+        const customTarget = dom.destinationInput.value.trim();
+        const finalTarget = customTarget.length > 0 ? customTarget : 'Unknown Deep Space Target';
+        dom.finalTargetDisplay.textContent = `Destination: ${finalTarget.toUpperCase()}`;
+        
+        // 🚀 THE AFTER EFFECT 🚀
+        dom.launchEffect.style.display = 'flex';
+        dom.progressBar.style.width = '100%';
+
+        // Simulate telemetry/system reporting updates
+        setTimeout(() => {
+            dom.systemReport.textContent = 'Telemetry lock established: 100%';
+        }, 1000);
+        setTimeout(() => {
+            dom.systemReport.textContent = 'Payload separation confirmed.';
+        }, 2500);
+        setTimeout(() => {
+            dom.systemReport.textContent = 'MISSION SUCCESS. System Halted.';
+            dom.progressBar.classList.remove('bg-primary-blue');
+            dom.progressBar.classList.add('bg-green-500'); // Change to green on final success
+        }, 4000);
+    }
+
+
+    // --- INITIALIZATION ---
+    window.onload = () => {
+        // 1. Initial Render
+        render();
+
+        // 2. Start system clock
+        updateSystemTime();
+        currentState.clockInterval = setInterval(updateSystemTime, 1000);
+
+        console.log(`System Initialized. Access Code: ${CONFIG.ACCESS_CODE}`);
+    };
+
+    // Global Exposure for HTML
+    window.handleKey = handleKey;
+    window.toggleArming = toggleArming;
+    window.initiateLaunch = initiateLaunch;
+    window.resetSystem = resetSystem; // Expose the reset function
+</script>
+
+</body>
+</html>
